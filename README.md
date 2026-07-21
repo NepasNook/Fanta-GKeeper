@@ -9,7 +9,8 @@ python run.py                    # recompute from the CSVs already on disk
 ```
 
 The output is `classifica_portieri.html`: a self-contained page that opens with a
-double click and works offline.
+double click and works offline, with sliders for the threshold and matchday window and
+dropdowns for the budget caps.
 
 ## The question it answers
 
@@ -32,25 +33,49 @@ two teams are **complementary**, with their hard fixtures falling on different w
    and therefore `P(clean sheet) = e^(−expected goals)`. The higher exponent on the
    opponent's attack is deliberate: who you face matters more than how solid you are.
    Note the home factor applies to whoever is *scoring*, i.e. the opponent — if you
-   play at home, they are away and score slightly less.
+   play at home, they are away and score slightly less. The league mean is scaled by
+   `CORREZIONE_MU` because scoring keeps falling and a backward-looking average lags.
 3. **Pairing** — each matchday you field the better of the two, so a pair is worth
-   `max(P_A, P_B)`, summed over every matchday.
+   `max(P_A, P_B)`, summed over every matchday. Which goalkeeper to field is the same
+   under either metric: both clean-sheet probability and expected points fall as
+   expected goals rise.
 
 The green/yellow/red colours **are not part of the model**: they are only a rendering
 of the estimated numbers.
 
-## The three metrics, and why none is enough on its own
+## The four metrics, and why none is enough on its own
 
-| Metric | What it rewards | Winner |
+| Metric | What it rewards | Winner (unconstrained) |
 |---|---|---|
-| **Coverage** | matchdays above the "easy" threshold | Atalanta + Napoli (71%) |
+| **Coverage** | matchdays above the "easy" threshold | Juventus + Roma (79%) |
 | **Average** | mean quality of the fixture actually played | the big clubs |
-| **Gain** | how much alternating beats just keeping the better one | Genoa + Udinese (+6.6) |
+| **Points** | expected bonus/malus under classic rules | Inter + Roma (−13.0) |
+| **Gain** | how much alternating beats just keeping the better one | Genoa + Udinese (+6.7) |
 
-Without a **cost** constraint the answer is trivial: buy the goalkeepers of the two
-strongest teams. *Gain* instead rewards evenly matched pairs, which alternate well but
-start from a low base. The interesting question — "given X credits, which pair covers
-me best?" — needs auction prices, which are not in the project yet.
+*Points* is expected fantasy scoring: `−λ + e^(−λ)`, i.e. −1 per goal conceded plus 1
+for a clean sheet. The base vote is excluded because the model cannot predict it, so
+the total is negative — what matters is the comparison between pairs, not the sign.
+
+Coverage and points genuinely disagree, which is why both exist: coverage counts
+matchdays over the line and ignores how far over, while points distinguish conceding
+one from conceding four. Under the budget constraint below, coverage picks
+Bologna + Juventus while points pick Bologna + Inter.
+
+## The budget constraint
+
+Without a cost constraint the ranking is useless at an auction: **all ten best pairs
+are made of expensive teams**, which just says "buy the goalkeepers of the strong
+clubs". Real auction budgets do not allow that.
+
+Since a price list is not available yet, cost is modelled as a **cap on the number of
+expensive goalkeepers** rather than invented credit values. Teams are split into two
+hand-estimated tiers in `config.py` — `FASCIA_ALTISSIMA` (Napoli, Roma, Inter, Milan)
+and `FASCIA_ALTA` (Juventus, Como, Atalanta) — and `MAX_ALTISSIMA` / `MAX_COSTOSI` cap
+how many of each a combination may contain. Both are dropdowns on the page.
+
+This turns the output into the question an auction actually poses: *if I splash out on
+one goalkeeper, who is the best partner?* With the default caps the answer is
+Bologna + Juventus (76% coverage) rather than an all-star pair you could never afford.
 
 **Counterintuitive finding:** the idea that a mid-table goalkeeper with a good fixture
 list can alternate with a top-six one does not survive contact with the data. Inter +
@@ -80,6 +105,7 @@ the first), so all 38 matchdays are genuinely parsed rather than mirrored.
 run.py                     main command
 backtest.py                does the model actually work? walk-forward validation
 calibra.py                 which parameters predict best? grid search
+prova_coerenza.py          do Python and the in-page JavaScript still agree?
 controlla_fonti.py         are the sources still up, and in the expected format?
 diagnosi_storico.py        which seasons can be trusted
 prova_complementarita.py   does big + mid-table alternate well? (no)
@@ -99,9 +125,11 @@ hand and everything else still works. They are committed on purpose, so on anoth
 machine the page opens and `python run.py` runs without network access.
 
 Note that `report.py` embeds the data as JSON and **recomputes everything in the
-browser** (threshold slider, matchday window, pairs/triples). The ranking logic
-therefore exists twice, in Python and in JavaScript: a change to the scoring or
-ordering semantics must be applied in both places.
+browser** (threshold slider, matchday window, budget caps, pairs/triples). The ranking
+logic therefore exists twice, in Python and in JavaScript: a change to the scoring or
+ordering semantics must be applied in both places. `python prova_coerenza.py` mirrors
+the JavaScript and diffs it against `pairing.py` across eight configurations, so the
+divergence gets caught instead of going unnoticed.
 
 ## Tuning
 
@@ -112,7 +140,10 @@ Everything in `fantaportieri/config.py`:
 - `ESP_ATTACCO_AVVERSARIO` / `ESP_DIFESA_MIA` (1.20 / 0.90) — which side weighs more
 - `FATTORE_CASA` / `FATTORE_TRASFERTA` (1.08 / 0.93) — deliberately mild
 - `PRIOR_NEOPROMOSSA_*` (0.82 / 1.18) — the target for teams coming up from Serie B
-- `SQUADRE_COSTOSE` — triples always exclude these
+- `CORREZIONE_MU` (0.93) — corrects the falling-scoring bias, see below
+- `FASCIA_ALTISSIMA` / `FASCIA_ALTA` — the hand-estimated price tiers
+- `MAX_ALTISSIMA` / `MAX_COSTOSI` (1 / 1) — the budget caps, dropdowns on the page
+- `BONUS_IMBATTIBILITA` (1.0) — the clean-sheet bonus in your league's rules
 - `SOGLIA_FACILE` (0.40) — a slider on the page
 
 `python calibra.py` tries 1600 combinations under the same walk-forward validation as
@@ -123,13 +154,15 @@ signal, though: 0.82/1.18 wins clearly, and pulling toward the league average
 
 ## Known limits
 
-- **The model is about 7% pessimistic.** Serie A scoring has been falling for years
-  (1.43 goals per team per match in 2021-22, 1.21 in 2025-26), and the league mean is a
-  backward-looking average that always lags: in the backtest it overestimates goals in
-  4 test seasons out of 4 (+0.08 per match on average). Because `SOGLIA_FACILE` is an
-  absolute threshold, fixtures the model rates 33-40% actually come in around 42%, so a
-  few genuinely easy matchdays are counted as uncovered. Pair *ordering* is unaffected
-  (the bias is common to all teams); the absolute percentages are not.
+- **The falling-scoring correction is fitted, not validated.** Serie A scoring has been
+  dropping for years (1.43 goals per team per match in 2021-22, 1.21 in 2025-26), and a
+  backward-looking league mean always lags: the raw model overestimated goals in 4 test
+  seasons out of 4. `CORREZIONE_MU = 0.93` removes that, and it works — the goal bias
+  falls from +0.12 to +0.03 per match, and the 25-40% probability bands, previously off
+  by 5-8 points, now land within 2. But 0.93 was derived from those same four seasons,
+  so the improvement is a fit rather than an out-of-sample result. The per-season
+  optimum ranges from 0.87 to 0.98, so a single factor corrects the average lag, not
+  each season's.
 - 2024-25 has 370/380 matches in the dataset (the 38th matchday is missing). It removes
   one match from each of the 20 teams, so it does not distort the averages.
 - The model ignores injuries, suspensions, rotation and transfers: it is fixtures only.

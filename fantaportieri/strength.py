@@ -16,6 +16,7 @@ di `calibra.py`, che deve poter valutare combinazioni diverse senza toccare i mo
 from collections import defaultdict
 
 from .config import (
+    CORREZIONE_MU,
     DECADIMENTO_STAGIONI,
     PESO_REGRESSIONE_MEDIA,
     PRIOR_NEOPROMOSSA_ATTACCO,
@@ -40,12 +41,21 @@ def _pesi_stagioni(stagioni: list[str], decadimento: float = DECADIMENTO_STAGION
     return {s: decadimento ** (ultima - i) for i, s in enumerate(ordinate)}
 
 
-def media_gol_lega(storico: list[StatStagione], decadimento: float = DECADIMENTO_STAGIONI) -> float:
-    """Media gol di riferimento per la stagione da prevedere: media pesata delle passate."""
+def media_gol_lega(
+    storico: list[StatStagione],
+    decadimento: float = DECADIMENTO_STAGIONI,
+    correzione: float = CORREZIONE_MU,
+) -> float:
+    """Media gol di riferimento per la stagione da prevedere.
+
+    E' la media pesata delle stagioni passate, poi corretta: guardando indietro si
+    insegue un campionato che segna sempre meno, quindi la media grezza sovrastima
+    (vedi CORREZIONE_MU). Passa `correzione=1.0` per ottenere il valore grezzo.
+    """
     mu = _mu_per_stagione(storico)
     pesi = _pesi_stagioni(list(mu), decadimento)
     numeratore = sum(mu[s] * pesi[s] for s in mu)
-    return numeratore / sum(pesi.values())
+    return correzione * numeratore / sum(pesi.values())
 
 
 def calcola_forze(

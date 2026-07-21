@@ -18,6 +18,9 @@ from datetime import date
 from pathlib import Path
 
 from .config import (
+    FASCIA_ALTISSIMA,
+    MAX_ALTISSIMA,
+    MAX_COSTOSI,
     PERCENTILE_ROSSO,
     PERCENTILE_VERDE,
     SOGLIA_FACILE,
@@ -56,6 +59,7 @@ def costruisci_dati(
             "neopromossa": f.neopromossa,
             "stagioni": f.stagioni_usate,
             "costosa": f.squadra in SQUADRE_COSTOSE,
+            "altissima": f.squadra in FASCIA_ALTISSIMA,
         }
         for f in ordinate
     ]
@@ -68,6 +72,7 @@ def costruisci_dati(
                 "casa": i.in_casa,
                 "gol": round(i.gol_attesi_subiti, 3),
                 "pcs": round(i.prob_clean_sheet, 4),
+                "pnt": round(i.punti_attesi, 4),
             }
             for i in sorted(per_giornata.values(), key=lambda x: x.giornata)
         ]
@@ -85,6 +90,9 @@ def costruisci_dati(
         "squadre": squadre,
         "calendario": calendario,
         "costose": sorted(SQUADRE_COSTOSE),
+        "altissime": sorted(FASCIA_ALTISSIMA),
+        "maxAltissima": MAX_ALTISSIMA,
+        "maxCostosi": MAX_COSTOSI,
         "storico": rapporti_storico,
     }
 
@@ -304,13 +312,25 @@ _PAGINA = r"""<!doctype html>
         <option value="copertura">Copertura (giornate coperte)</option>
         <option value="media">Qualita' media della partita</option>
         <option value="guadagno">Guadagno dell'alternanza</option>
+        <option value="punti">Fantapunti in stagione</option>
       </select>
     </div>
     <div class="campo">
-      <label for="escludi">Portieri costosi</label>
-      <select id="escludi">
-        <option value="no">Ammessi</option>
-        <option value="si">Esclusi</option>
+      <label for="maxAlt" title="Napoli, Roma, Inter, Milan: i portieri piu' cari dell'asta.">Max fascia altissima</label>
+      <select id="maxAlt">
+        <option value="0">nessuno</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="9">senza limite</option>
+      </select>
+    </div>
+    <div class="campo">
+      <label for="maxCost" title="Fascia altissima piu' Juventus, Como, Atalanta.">Max portieri cari</label>
+      <select id="maxCost">
+        <option value="0">nessuno</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="9">senza limite</option>
       </select>
     </div>
   </div>
@@ -335,6 +355,7 @@ _PAGINA = r"""<!doctype html>
           <th class="num">Copertura</th>
           <th class="num">Facili</th>
           <th class="num">Media P(imb.)</th>
+          <th class="num" title="Bonus/malus attesi sull'intera finestra, regolamento classico: -1 per ogni gol subito, +1 se imbattuto. Voto base escluso, quindi il totale e' negativo: conta il confronto fra coppie, non il segno.">Fantapunti</th>
           <th class="num" title="Quanto rende alternare, rispetto a tenere sempre il migliore dei due. Vicino a zero = il secondo portiere e' un doppione.">Guadagno</th>
           <th>Calendario</th>
         </tr>
@@ -385,11 +406,13 @@ const stato = {
   da: DATI.giornate[0],
   a: DATI.giornate[DATI.giornate.length - 1],
   ordina: "copertura",
-  escludi: false,
+  maxAlt: DATI.maxAltissima,
+  maxCost: DATI.maxCostosi,
   selezione: null,
 };
 
 const COSTOSE = new Set(DATI.costose);
+const ALTISSIME = new Set(DATI.altissime);
 
 function classe(pcs, soglia) {
   if (pcs >= soglia) return "facile";
@@ -402,9 +425,18 @@ function giornateAttive() {
 }
 
 function squadreAmmesse() {
-  let nomi = DATI.squadre.map((s) => s.nome);
-  if (stato.escludi || stato.dimensione === 3) nomi = nomi.filter((n) => !COSTOSE.has(n));
-  return nomi.sort();
+  return DATI.squadre.map((s) => s.nome).sort();
+}
+
+// Rispecchia pairing._ammessa: il budget e' un tetto sul NUMERO di portieri cari,
+// quindi si applica alla combinazione, non alla singola squadra.
+function ammessa(gruppo) {
+  let alt = 0, cost = 0;
+  for (const s of gruppo) {
+    if (ALTISSIME.has(s)) alt++;
+    if (COSTOSE.has(s)) cost++;
+  }
+  return alt <= stato.maxAlt && cost <= stato.maxCost;
 }
 
 // squadra -> giornata -> impegno.
@@ -419,7 +451,7 @@ for (const [squadra, lista] of Object.entries(DATI.calendario)) {
 }
 
 function valuta(gruppo, giornate) {
-  let somma = 0, facili = 0, valide = 0;
+  let somma = 0, sommaPunti = 0, facili = 0, valide = 0;
   const scelte = [];
   const singole = Object.fromEntries(gruppo.map((s) => [s, 0]));
   for (const g of giornate) {
@@ -432,6 +464,9 @@ function valuta(gruppo, giornate) {
     }
     if (!best) continue;
     somma += best.pcs;
+    // Chi schierare non cambia fra le due metriche: entrambe decrescono al
+    // crescere dei gol attesi. Cambia la somma su tutte le giornate.
+    sommaPunti += best.pnt;
     valide++;
     if (best.pcs >= stato.soglia) facili++;
     scelte.push(best);
@@ -452,6 +487,8 @@ function valuta(gruppo, giornate) {
     guadagno: media - mediaSingolo,
     migliorSingolo,
     mediaSingolo,
+    punti: sommaPunti,
+    mediaPunti: sommaPunti / valide,
   };
 }
 
@@ -470,6 +507,7 @@ function classifica() {
   const nomi = squadreAmmesse();
   const res = [];
   for (const gruppo of combinazioni(nomi, stato.dimensione)) {
+    if (!ammessa(gruppo)) continue;
     const v = valuta(gruppo, giornate);
     if (v) res.push(v);
   }
@@ -477,6 +515,7 @@ function classifica() {
     copertura: (x, y) => (y.copertura - x.copertura) || (y.media - x.media),
     media: (x, y) => (y.media - x.media) || (y.copertura - x.copertura),
     guadagno: (x, y) => (y.guadagno - x.guadagno) || (y.media - x.media),
+    punti: (x, y) => (y.punti - x.punti) || (y.copertura - x.copertura),
   };
   res.sort(criteri[stato.ordina]);
   return res;
@@ -526,6 +565,11 @@ function render() {
       <div class="nota">schierando ogni volta il migliore</div>
     </div>
     <div class="tile">
+      <div class="etichetta">Fantapunti nella finestra</div>
+      <div class="valore">${migliore.punti.toFixed(1)}</div>
+      <div class="nota">bonus/malus, voto base escluso</div>
+    </div>
+    <div class="tile">
       <div class="etichetta">Guadagno dell'alternanza</div>
       <div class="valore">${(migliore.guadagno * 100).toFixed(1)}</div>
       <div class="nota">punti sopra il solo ${migliore.migliorSingolo} (${pct1(migliore.mediaSingolo)})</div>
@@ -534,7 +578,7 @@ function render() {
   const corpo = $("corpo");
   corpo.innerHTML = "";
   if (!res.length) {
-    corpo.innerHTML = `<tr><td colspan="7" class="vuoto">Nessuna combinazione con questi filtri.</td></tr>`;
+    corpo.innerHTML = `<tr><td colspan="8" class="vuoto">Nessuna combinazione con questi filtri.</td></tr>`;
   }
   const chiave = (c) => c.squadre.join("|");
   if (!stato.selezione || !res.some((c) => chiave(c) === stato.selezione)) {
@@ -555,6 +599,7 @@ function render() {
       <td class="num">${pct(c.copertura)}</td>
       <td class="num">${c.facili}/${c.totali}</td>
       <td class="num">${pct1(c.media)}</td>
+      <td class="num" title="${c.mediaPunti.toFixed(3)} a giornata">${c.punti.toFixed(1)}</td>
       <td class="num" title="Da solo, ${c.migliorSingolo} vale ${pct1(c.mediaSingolo)}">${(c.guadagno * 100).toFixed(1)}</td>
       <td><div class="striscia">${celle}</div></td>`;
     tr.onclick = () => { stato.selezione = chiave(c); render(); };
@@ -607,10 +652,12 @@ function sincronizza() {
   $("outA").textContent = stato.a;
   $("btn2").className = stato.dimensione === 2 ? "attivo" : "";
   $("btn3").className = stato.dimensione === 3 ? "attivo" : "";
-  $("escludi").disabled = stato.dimensione === 3;
-  $("notaEscludi").textContent = stato.dimensione === 3
-    ? "Le triple escludono sempre i portieri costosi (" + DATI.costose.join(", ") + "): con una tripla stai rinunciando al titolare di una big."
-    : "";
+  $("maxAlt").value = String(stato.maxAlt);
+  $("maxCost").value = String(stato.maxCost);
+  const cari = stato.maxCost === 0
+    ? "Nessun portiere caro: e' lo scenario delle tre riserve da alternare."
+    : `Al massimo ${stato.maxCost} portiere/i caro/i (${DATI.costose.join(", ")}), di cui ${stato.maxAlt} di fascia altissima (${DATI.altissime.join(", ")}).`;
+  $("notaEscludi").textContent = stato.maxCost > 8 ? "Nessun vincolo di spesa: la classifica premia solo le squadre forti." : cari;
 }
 
 $("soglia").oninput = (e) => { stato.soglia = +e.target.value; sincronizza(); render(); };
@@ -625,7 +672,17 @@ $("a").oninput = (e) => {
   sincronizza(); render();
 };
 $("ordina").onchange = (e) => { stato.ordina = e.target.value; render(); };
-$("escludi").onchange = (e) => { stato.escludi = e.target.value === "si"; stato.selezione = null; render(); };
+$("maxAlt").onchange = (e) => {
+  stato.maxAlt = +e.target.value;
+  // Un tetto sui cari totali piu' basso di quello sui carissimi non avrebbe senso.
+  if (stato.maxCost < stato.maxAlt) stato.maxCost = stato.maxAlt;
+  stato.selezione = null; sincronizza(); render();
+};
+$("maxCost").onchange = (e) => {
+  stato.maxCost = +e.target.value;
+  if (stato.maxAlt > stato.maxCost) stato.maxAlt = stato.maxCost;
+  stato.selezione = null; sincronizza(); render();
+};
 $("btn2").onclick = () => { stato.dimensione = 2; stato.selezione = null; sincronizza(); render(); };
 $("btn3").onclick = () => { stato.dimensione = 3; stato.selezione = null; sincronizza(); render(); };
 

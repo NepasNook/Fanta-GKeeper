@@ -10,6 +10,7 @@ import math
 from collections import defaultdict
 
 from .config import (
+    BONUS_IMBATTIBILITA,
     ESP_ATTACCO_AVVERSARIO,
     ESP_DIFESA_MIA,
     FATTORE_CASA,
@@ -33,6 +34,23 @@ def gol_attesi_subiti(
 def prob_clean_sheet(gol_attesi: float) -> float:
     """P(Poisson(lambda) == 0)."""
     return math.exp(-gol_attesi)
+
+
+def punti_attesi(gol_attesi: float, bonus: float = BONUS_IMBATTIBILITA) -> float:
+    """Bonus/malus attesi del portiere in questa partita, regolamento classico.
+
+        -lambda           il malus: -1 per ogni gol subito, in media lambda gol
+        +bonus * e^-lambda  il premio per l'imbattibilita', quando arriva
+
+    Non include il voto base, che il modello non sa prevedere: e' la parte che
+    dipende dal calendario, ed e' l'unica che ti serve per scegliere fra due portieri.
+
+    Sulla singola partita ordina come `prob_clean_sheet` (entrambe decrescono al
+    crescere di lambda), quindi la scelta di chi schierare non cambia. Cambia la
+    SOMMA su 38 giornate: la probabilita' di imbattibilita' considera equivalenti
+    "ne subisce 1" e "ne subisce 4", il fantacalcio no.
+    """
+    return -gol_attesi + bonus * math.exp(-gol_attesi)
 
 
 def costruisci_impegni(
@@ -59,6 +77,7 @@ def costruisci_impegni(
                 in_casa=in_casa,
                 gol_attesi_subiti=gol,
                 prob_clean_sheet=prob_clean_sheet(gol),
+                punti_attesi=punti_attesi(gol),
             )
 
     return dict(impegni)

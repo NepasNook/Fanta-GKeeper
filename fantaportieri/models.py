@@ -48,6 +48,8 @@ class Impegno:
     in_casa: bool
     gol_attesi_subiti: float
     prob_clean_sheet: float
+    # Bonus/malus attesi col regolamento classico, voto base escluso.
+    punti_attesi: float
 
 
 @dataclass(frozen=True)
@@ -66,3 +68,8 @@ class Combo:
     guadagno: float
     miglior_singolo: str
     media_miglior_singolo: float
+    # Bonus/malus attesi col regolamento classico (voto base escluso): per giornata
+    # e sull'intera finestra. E' la stessa informazione della media di imbattibilita',
+    # ma in punti invece che in percentuale -- e distingue "subisce 1" da "subisce 4".
+    media_punti: float
+    punti_totali: float

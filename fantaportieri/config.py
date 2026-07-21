@@ -35,8 +35,30 @@ PRIOR_NEOPROMOSSA_DIFESA = 1.18    # subisce piu' della media
 # Nella pagina HTML e' uno slider, questo e' solo il valore iniziale.
 SOGLIA_FACILE = 0.40
 
-# Portieri "costosi": le triple vengono classificate solo SENZA queste squadre.
-SQUADRE_COSTOSE = {"Inter", "Milan", "Napoli", "Juventus", "Roma", "Como"}
+# Fasce di prezzo, stimate a mano in attesa del listone. Sono TUTTE squadre care:
+# la distinzione e' fra "carissimo" e "caro", non fra caro ed economico.
+FASCIA_ALTISSIMA = {"Napoli", "Roma", "Inter", "Milan"}
+FASCIA_ALTA = {"Juventus", "Como", "Atalanta"}
+SQUADRE_COSTOSE = FASCIA_ALTISSIMA | FASCIA_ALTA
+
+# Vincolo di spesa senza prezzi: quanti portieri cari ti puoi permettere.
+# Traduce la domanda vera dell'asta -- "se mi sveno su uno, qual e' il miglior
+# compagno?" -- senza dover inventare un listino che non esiste ancora.
+# Nella pagina HTML sono due menu a tendina, questi sono i valori iniziali.
+MAX_ALTISSIMA = 1
+MAX_COSTOSI = 1
+
+# Bonus di imbattibilita' del regolamento (classico: -1 per ogni gol, +1 se imbattuto).
+# Il malus per gol e' implicito nel modello: i gol attesi sono lambda.
+BONUS_IMBATTIBILITA = 1.0
+
+# Correzione del calo dei gol in Serie A (1.43 a squadra nel 2021-22, 1.21 nel 2025-26).
+# La media storica guarda all'indietro e quindi insegue il passato: nel backtest
+# sovrastima i gol in 4 stagioni di prova su 4. Il fattore che azzera lo scarto
+# complessivo e' 0.93 (per stagione: 0.87 / 0.97 / 0.98 / 0.91 -- sempre sotto 1, mai
+# sopra). Lo spread e' ampio, quindi questo corregge il pregiudizio MEDIO, non
+# l'errore di ogni singola stagione. Metti 1.0 per disattivarlo.
+CORREZIONE_MU = 0.93
 
 # Soglie dei colori, usate solo per colorare la griglia (NON entrano nel modello).
 # Sono percentili sulla distribuzione delle forze, non valori assoluti.

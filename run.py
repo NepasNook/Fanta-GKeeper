@@ -14,6 +14,8 @@ import webbrowser
 from pathlib import Path
 
 from fantaportieri.config import (
+    MAX_ALTISSIMA,
+    MAX_COSTOSI,
     SOGLIA_FACILE,
     SQUADRE_COSTOSE,
     STAGIONE_CORRENTE,
@@ -93,12 +95,28 @@ def calcola(rapporti: list[dict]) -> None:
         print(f"  {f.squadra:<12} att {f.attacco:.2f}   dif {f.difesa:.2f}   {segna}")
 
     coppie = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=2)
-    print(f"\nMigliori 10 coppie (soglia {SOGLIA_FACILE:.0%}, giornate 1-{max(giornate)}):")
+    print(f"\nMigliori 10 coppie SENZA vincolo di spesa (soglia {SOGLIA_FACILE:.0%}, giornate 1-{max(giornate)}):")
     for i, c in enumerate(coppie[:10], 1):
         print(
             f"  {i:2d}. {' + '.join(c.squadre):<26} "
             f"copertura {c.copertura:.0%} ({c.giornate_facili}/{c.giornate_totali})   "
-            f"media {c.media_clean_sheet:.1%}   guadagno {c.guadagno * 100:+.1f}"
+            f"media {c.media_clean_sheet:.1%}   punti {c.punti_totali:+.1f}"
+        )
+
+    entro_budget = classifica(
+        impegni, giornate, SOGLIA_FACILE, dimensione=2,
+        max_altissima=MAX_ALTISSIMA, max_costosi=MAX_COSTOSI,
+    )
+    print(
+        f"\nMigliori 10 coppie ENTRO IL BUDGET "
+        f"(max {MAX_ALTISSIMA} di fascia altissima, max {MAX_COSTOSI} cari in tutto):"
+    )
+    for i, c in enumerate(entro_budget[:10], 1):
+        caro = next((s for s in c.squadre if s in SQUADRE_COSTOSE), "-")
+        print(
+            f"  {i:2d}. {' + '.join(c.squadre):<26} "
+            f"copertura {c.copertura:.0%} ({c.giornate_facili}/{c.giornate_totali})   "
+            f"media {c.media_clean_sheet:.1%}   punti {c.punti_totali:+.1f}   [caro: {caro}]"
         )
 
     per_guadagno = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=2, ordina="guadagno")
@@ -109,12 +127,13 @@ def calcola(rapporti: list[dict]) -> None:
             f"(il solo {c.miglior_singolo} vale {c.media_miglior_singolo:.1%}, la coppia {c.media_clean_sheet:.1%})"
         )
 
-    triple = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=3, escludi_costose=True)
-    print("\nMigliori 5 triple (senza portieri costosi):")
+    triple = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=3, max_costosi=0)
+    print("\nMigliori 5 triple da alternare (nessun portiere caro):")
     for i, c in enumerate(triple[:5], 1):
         print(
             f"  {i:2d}. {' + '.join(c.squadre):<34} "
-            f"copertura {c.copertura:.0%}   media {c.media_clean_sheet:.1%}"
+            f"copertura {c.copertura:.0%}   media {c.media_clean_sheet:.1%}   "
+            f"punti {c.punti_totali:+.1f}"
         )
 
     dati = costruisci_dati(forze, impegni, mu, rapporti)
