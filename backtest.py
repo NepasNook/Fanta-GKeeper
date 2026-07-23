@@ -19,22 +19,14 @@ Tre domande, tre risposte:
 import math
 from collections import defaultdict
 
-from fantaportieri.config import (
-    ESP_ATTACCO_AVVERSARIO,
-    ESP_DIFESA_MIA,
-    FATTORE_CASA,
-    FATTORE_TRASFERTA,
-    STAGIONI_STORICHE,
-)
+from fantaportieri.config import STAGIONI_STORICHE
+
+# Il modello si importa, non si riscrive. Questo file ne e' il giudice: se ne
+# tenesse una copia, una modifica a `gol_attesi_subiti` lascerebbe il backtest a
+# validare la versione vecchia e a dichiararla buona.
+from fantaportieri.scoring import gol_attesi_subiti
 from fantaportieri.scrapers.storico_openfootball import scarica_partite, scarica_stagione
 from fantaportieri.strength import calcola_forze, media_gol_lega
-
-
-def _lambda(mia, avversario, in_casa, forze, mu):
-    attacco = forze[avversario].attacco ** ESP_ATTACCO_AVVERSARIO
-    difesa = forze[mia].difesa ** ESP_DIFESA_MIA
-    campo = FATTORE_TRASFERTA if in_casa else FATTORE_CASA
-    return mu * attacco * difesa * campo
 
 
 def _prepara(stagioni):
@@ -63,7 +55,7 @@ def backtest_stagione(test, storico, partite):
     for casa, trasferta, gc, gt in partite[test]:
         # Due portieri per partita: quello di casa (subisce gt) e quello in trasferta (subisce gc).
         for mia, avv, in_casa, subiti in ((casa, trasferta, True, gt), (trasferta, casa, False, gc)):
-            lam = _lambda(mia, avv, in_casa, forze, mu)
+            lam = gol_attesi_subiti(mia, avv, in_casa, forze, mu)
             campioni.append((math.exp(-lam), 1 if subiti == 0 else 0, lam, subiti))
     return campioni, train
 
