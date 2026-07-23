@@ -14,37 +14,52 @@ import webbrowser
 from pathlib import Path
 
 from fantaportieri.config import (
-    MAX_ALTISSIMA,
-    MAX_COSTOSI,
+    BUDGET,
+    COPERTURA_MINIMA_STORICO,
+    SOGLIA_ATTACCO,
     SOGLIA_FACILE,
-    SQUADRE_COSTOSE,
     STAGIONE_CORRENTE,
     STAGIONI_STORICHE,
 )
 from fantaportieri.data_io import (
     ErroreDati,
     leggi_calendario,
+    leggi_prezzi,
     leggi_storico,
     scrivi_calendario,
     scrivi_storico,
 )
 from fantaportieri.pairing import classifica
 from fantaportieri.report import costruisci_dati, scrivi_frammento, scrivi_html
-from fantaportieri.scoring import costruisci_impegni
+from fantaportieri.scoring import costruisci_impegni, costruisci_impegni_offensivi, solidita
+from fantaportieri.scrapers.rete import ErroreRete
 from fantaportieri.strength import calcola_forze, media_gol_lega
 
 RADICE = Path(__file__).parent
 CSV_STORICO = RADICE / "data" / "storico.csv"
 CSV_CALENDARIO = RADICE / "data" / "calendario.csv"
+CSV_PREZZI = RADICE / "data" / "prezzi.csv"
 
-# Il documento autonomo: si apre con doppio clic, contiene tutto, funziona offline.
-HTML = RADICE / "classifica_portieri.html"
-# La stessa pagina senza l'involucro <html>/<head>/<body>, per la pubblicazione web.
-FRAMMENTO = RADICE / "build" / "artifact.html"
+# I documenti autonomi: si aprono con doppio clic, contengono tutto, funzionano offline.
+HTML = {
+    "portieri": RADICE / "classifica_portieri.html",
+    "attaccanti": RADICE / "classifica_attaccanti.html",
+}
+# Le stesse pagine senza l'involucro <html>/<head>/<body>, per la pubblicazione web.
+FRAMMENTO = {
+    "portieri": RADICE / "build" / "artifact.html",
+    "attaccanti": RADICE / "build" / "artifact_attaccanti.html",
+}
 
 
 def scarica() -> list[dict]:
-    """Scarica dalle fonti e salva i CSV. Restituisce il rapporto sullo storico."""
+    """Scarica dalle fonti e salva i CSV. Restituisce il rapporto sullo storico.
+
+    Prima scarica e valida TUTTO, poi scrive. Scrivendo man mano, una fonte caduta
+    a meta' lascerebbe su disco un calendario nuovo accanto a uno storico vecchio:
+    due CSV coerenti singolarmente e incoerenti fra loro, che e' il modo peggiore
+    di fallire perche' il calcolo dopo funziona lo stesso.
+    """
     from fantaportieri.scrapers.calendario_wikipedia import scarica_calendario
     from fantaportieri.scrapers.storico_openfootball import scarica_storico
 
@@ -56,29 +71,111 @@ def scarica() -> list[dict]:
             print(f"    - {p}")
         print("  I CSV non sono stati scritti. Lancia 'python controlla_fonti.py'.")
         sys.exit(1)
-    scrivi_calendario(CSV_CALENDARIO, partite)
-    print(f"  {len(partite)} partite -> {CSV_CALENDARIO.relative_to(RADICE)}")
+    print(f"  {len(partite)} partite, validate")
 
     print(f"Storico {STAGIONI_STORICHE[0]}..{STAGIONI_STORICHE[-1]} da openfootball ...")
     righe, rapporti = scarica_storico(STAGIONI_STORICHE)
+    scarse = []
     for r in rapporti:
+        segnale = "" if r["copertura"] >= COPERTURA_MINIMA_STORICO else "  <-- troppo incompleta"
         print(
             f"  {r['stagione']}: {r['partite_con_risultato']}/{r['partite_in_calendario']} "
-            f"partite ({r['copertura']:.0%})"
+            f"partite ({r['copertura']:.0%}){segnale}"
         )
+        if r["copertura"] < COPERTURA_MINIMA_STORICO:
+            scarse.append(r)
+
+    if scarse:
+        print(
+            f"\n  ATTENZIONE: {len(scarse)} stagioni sotto la copertura minima "
+            f"({COPERTURA_MINIMA_STORICO:.0%}). Le forze sarebbero stimate su mezzo\n"
+            "  campionato e sembrerebbero comunque ragionevoli, quindi i CSV non sono\n"
+            "  stati scritti. Se la fonte e' semplicemente indietro, abbassa\n"
+            "  COPERTURA_MINIMA_STORICO in config.py, oppure togli quella stagione."
+        )
+        sys.exit(1)
+
+    scrivi_calendario(CSV_CALENDARIO, partite)
+    print(f"\n  {len(partite)} partite -> {CSV_CALENDARIO.relative_to(RADICE)}")
     scrivi_storico(CSV_STORICO, righe)
     print(f"  {len(righe)} righe squadra-stagione -> {CSV_STORICO.relative_to(RADICE)}")
     return rapporti
 
 
+def _classifica_portieri(impegni, giornate, prezzi) -> None:
+    budget = BUDGET["portieri"]
+    senza = classifica(impegni, giornate, SOGLIA_FACILE, prezzi, dimensione=2)
+    print(f"\nMigliori 10 coppie SENZA vincolo di spesa (soglia {SOGLIA_FACILE:.0%}, giornate 1-{max(giornate)}):")
+    for i, c in enumerate(senza[:10], 1):
+        print(
+            f"  {i:2d}. {' + '.join(c.squadre):<26} costa {c.prezzo:>5.0%}   "
+            f"copertura {c.copertura:.0%} ({c.giornate_facili}/{c.giornate_totali})   "
+            f"media {c.media_probabilita:.1%}   punti {c.punti_totali:+.1f}"
+        )
+
+    entro = classifica(impegni, giornate, SOGLIA_FACILE, prezzi, dimensione=2, budget=budget)
+    print(f"\nMigliori 10 coppie ENTRO IL BUDGET ({budget:.0%} del monte crediti):")
+    for i, c in enumerate(entro[:10], 1):
+        print(
+            f"  {i:2d}. {' + '.join(c.squadre):<26} costa {c.prezzo:>5.0%}   "
+            f"copertura {c.copertura:.0%} ({c.giornate_facili}/{c.giornate_totali})   "
+            f"media {c.media_probabilita:.1%}   punti {c.punti_totali:+.1f}"
+        )
+
+    resa = classifica(
+        impegni, giornate, SOGLIA_FACILE, prezzi, dimensione=2,
+        budget=budget, ordina="efficienza",
+    )
+    print("\nMiglior RESA PER CREDITO (imbattibilita' media divisa per il prezzo):")
+    for i, c in enumerate(resa[:5], 1):
+        print(
+            f"  {i:2d}. {' + '.join(c.squadre):<26} costa {c.prezzo:>5.0%}   "
+            f"media {c.media_probabilita:.1%}   resa {c.media_probabilita / c.prezzo:.2f}"
+        )
+
+
+def _classifica_attaccanti(impegni, giornate, prezzi) -> None:
+    budget = BUDGET["attaccanti"]
+    # Ordinati per `totale` e non per copertura: in campo vanno tutti e tre, quindi
+    # conta la somma. La copertura, che per i portieri e' il criterio naturale, qui
+    # non ordina -- l'Inter supera la soglia in 27 partite su 38 e la seconda squadra
+    # in 5, quindi "copertura alta" finisce per voler dire solo "hai preso l'Inter".
+    terzetti = classifica(
+        impegni, giornate, SOGLIA_ATTACCO, prezzi, dimensione=3,
+        budget=budget, ordina="totale",
+    )
+    print(
+        f"\nMigliori 10 TERZETTI di attaccanti entro il {budget:.0%} del monte crediti, "
+        f"per fantapunti di tutti e tre:"
+    )
+    for i, c in enumerate(terzetti[:10], 1):
+        print(
+            f"  {i:2d}. {' + '.join(c.squadre):<34} costa {c.prezzo:>5.0%}   "
+            f"gol-punti {c.punti_tutti:.0f}   copertura {c.copertura:.0%}"
+        )
+
+    resa = classifica(
+        impegni, giornate, SOGLIA_ATTACCO, prezzi, dimensione=3,
+        budget=budget, ordina="efficienza",
+    )
+    print("\nMiglior RESA PER CREDITO in attacco:")
+    for i, c in enumerate(resa[:5], 1):
+        print(
+            f"  {i:2d}. {' + '.join(c.squadre):<34} costa {c.prezzo:>5.0%}   "
+            f"media {c.media_probabilita:.1%}   resa {c.media_probabilita / c.prezzo:.2f}"
+        )
+
+
 def calcola(rapporti: list[dict]) -> None:
     storico = leggi_storico(CSV_STORICO)
     calendario = leggi_calendario(CSV_CALENDARIO)
+    prezzi = leggi_prezzi(CSV_PREZZI)
+    if not CSV_PREZZI.exists():
+        print(f"({CSV_PREZZI.name} assente: uso i prezzi di config.py)")
 
     squadre = {p.casa for p in calendario} | {p.trasferta for p in calendario}
     mu = media_gol_lega(storico)
     forze = calcola_forze(storico, squadre)
-    impegni = costruisci_impegni(calendario, forze, mu)
     giornate = sorted({p.giornata for p in calendario})
 
     print(f"\nMedia campionato: {mu:.2f} gol per squadra a partita")
@@ -87,61 +184,27 @@ def calcola(rapporti: list[dict]) -> None:
     if neopromosse:
         print(f"Dalla Serie B (prior neopromossa): {', '.join(sorted(neopromosse))}")
 
-    print("\nForza stimata (attacco / difesa, relativi alla media):")
-    from fantaportieri.scoring import forza_complessiva
-
-    for f in sorted(forze.values(), key=forza_complessiva, reverse=True):
-        segna = "costoso" if f.squadra in SQUADRE_COSTOSE else ""
-        print(f"  {f.squadra:<12} att {f.attacco:.2f}   dif {f.difesa:.2f}   {segna}")
-
-    coppie = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=2)
-    print(f"\nMigliori 10 coppie SENZA vincolo di spesa (soglia {SOGLIA_FACILE:.0%}, giornate 1-{max(giornate)}):")
-    for i, c in enumerate(coppie[:10], 1):
+    print("\nForza stimata, ordinata per SOLIDITA' DIFENSIVA (cio' che conta per un portiere):")
+    for f in sorted(forze.values(), key=solidita, reverse=True):
         print(
-            f"  {i:2d}. {' + '.join(c.squadre):<26} "
-            f"copertura {c.copertura:.0%} ({c.giornate_facili}/{c.giornate_totali})   "
-            f"media {c.media_clean_sheet:.1%}   punti {c.punti_totali:+.1f}"
+            f"  {f.squadra:<12} dif {f.difesa:.2f} (solidita' {solidita(f):.2f})   "
+            f"att {f.attacco:.2f}   "
+            f"prezzi P {prezzi['portieri'].get(f.squadra, 0.03):>4.0%} / "
+            f"A {prezzi['attaccanti'].get(f.squadra, 0.03):>4.0%}"
         )
 
-    entro_budget = classifica(
-        impegni, giornate, SOGLIA_FACILE, dimensione=2,
-        max_altissima=MAX_ALTISSIMA, max_costosi=MAX_COSTOSI,
-    )
-    print(
-        f"\nMigliori 10 coppie ENTRO IL BUDGET "
-        f"(max {MAX_ALTISSIMA} di fascia altissima, max {MAX_COSTOSI} cari in tutto):"
-    )
-    for i, c in enumerate(entro_budget[:10], 1):
-        caro = next((s for s in c.squadre if s in SQUADRE_COSTOSE), "-")
-        print(
-            f"  {i:2d}. {' + '.join(c.squadre):<26} "
-            f"copertura {c.copertura:.0%} ({c.giornate_facili}/{c.giornate_totali})   "
-            f"media {c.media_clean_sheet:.1%}   punti {c.punti_totali:+.1f}   [caro: {caro}]"
-        )
+    impegni = costruisci_impegni(calendario, forze, mu)
+    _classifica_portieri(impegni, giornate, prezzi["portieri"])
 
-    per_guadagno = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=2, ordina="guadagno")
-    print("\nCoppie piu' COMPLEMENTARI (guadagno dell'alternanza, non valore assoluto):")
-    for i, c in enumerate(per_guadagno[:5], 1):
-        print(
-            f"  {i:2d}. {' + '.join(c.squadre):<26} guadagno {c.guadagno * 100:+.1f} punti   "
-            f"(il solo {c.miglior_singolo} vale {c.media_miglior_singolo:.1%}, la coppia {c.media_clean_sheet:.1%})"
-        )
+    offensivi = costruisci_impegni_offensivi(calendario, forze, mu)
+    _classifica_attaccanti(offensivi, giornate, prezzi["attaccanti"])
 
-    triple = classifica(impegni, giornate, SOGLIA_FACILE, dimensione=3, max_costosi=0)
-    print("\nMigliori 5 triple da alternare (nessun portiere caro):")
-    for i, c in enumerate(triple[:5], 1):
-        print(
-            f"  {i:2d}. {' + '.join(c.squadre):<34} "
-            f"copertura {c.copertura:.0%}   media {c.media_clean_sheet:.1%}   "
-            f"punti {c.punti_totali:+.1f}"
-        )
-
-    dati = costruisci_dati(forze, impegni, mu, rapporti)
-    scrivi_html(dati, HTML)
-    print(f"\nPagina interattiva: {HTML}")
-
-    scrivi_frammento(dati, FRAMMENTO)
-    print(f"Versione per il web:  {FRAMMENTO}")
+    for ruolo, dati_impegni in (("portieri", impegni), ("attaccanti", offensivi)):
+        dati = costruisci_dati(forze, dati_impegni, mu, rapporti, prezzi[ruolo], ruolo=ruolo)
+        scrivi_html(dati, HTML[ruolo])
+        scrivi_frammento(dati, FRAMMENTO[ruolo])
+        print(f"\nPagina {ruolo}: {HTML[ruolo]}")
+        print(f"  per il web:  {FRAMMENTO[ruolo]}")
 
 
 def main() -> None:
@@ -152,7 +215,12 @@ def main() -> None:
 
     rapporti: list[dict] = []
     if args.scarica:
-        rapporti = scarica()
+        try:
+            rapporti = scarica()
+        except ErroreRete as e:
+            print(f"Fonte irraggiungibile: {e}")
+            print("I CSV gia' presenti sono intatti: 'python run.py' senza --scarica funziona.")
+            sys.exit(1)
     elif not CSV_STORICO.exists() or not CSV_CALENDARIO.exists():
         print("Dati mancanti. Lancia prima:  python run.py --scarica")
         sys.exit(1)

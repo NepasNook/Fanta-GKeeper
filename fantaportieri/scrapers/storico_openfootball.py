@@ -12,6 +12,7 @@ di stagione: una stagione al 90% resta utilizzabile. `copertura()` dice quanto
 manca, cosi' la decisione e' informata invece che nascosta.
 """
 
+import re
 from collections import defaultdict
 
 from ..config import normalizza_squadra
@@ -79,6 +80,32 @@ def scarica_partite(stagione: str) -> list[tuple[str, str, int, int]]:
             continue
         gc, gt = risultato
         partite.append((normalizza_squadra(p["team1"]), normalizza_squadra(p["team2"]), gc, gt))
+    return partite
+
+
+def _giornata(partita: dict) -> int | None:
+    """Il numero di giornata da `round` ("Matchday 12"), se c'e'."""
+    trovato = re.search(r"(\d{1,2})", str(partita.get("round", "")))
+    return int(trovato.group(1)) if trovato else None
+
+
+def scarica_giornate(stagione: str) -> list[tuple[int, str, str, int, int]]:
+    """Le partite giocate con la giornata: (giornata, casa, trasferta, gol_casa, gol_trasferta).
+
+    Serve a `backtest_scelta.py`, che deve sapere quali partite cadono nello stesso
+    turno: senza la giornata non si puo' dire quale dei due portieri avresti schierato.
+    Le partite senza `round` leggibile vengono scartate, non indovinate.
+    """
+    partite: list[tuple[int, str, str, int, int]] = []
+    for p in _partite_grezze(stagione):
+        risultato = _risultato(p)
+        giornata = _giornata(p)
+        if risultato is None or giornata is None:
+            continue
+        gc, gt = risultato
+        partite.append(
+            (giornata, normalizza_squadra(p["team1"]), normalizza_squadra(p["team2"]), gc, gt)
+        )
     return partite
 
 
