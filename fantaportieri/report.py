@@ -237,74 +237,107 @@ _PAGINA = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Accoppiate portieri — Serie A</title>
 <style>
+  /* Default SCURO: e' la faccia "dashboard premium" della pagina. Il tema chiaro
+     resta come override esplicito -- il pulsante in alto lo attiva, e l'host di
+     un Artifact lo stampa da solo come data-theme="light". Niente switch
+     automatico su prefers-color-scheme: il default voluto e' lo scuro, ovunque. */
   :root {
-    color-scheme: light;
-    --plane: #f9f9f7;
-    --surface: #fcfcfb;
-    --ink: #0b0b0b;
-    --ink-2: #52514e;
-    --muted: #898781;
-    --grid: #e1e0d9;
-    --bordo: rgba(11,11,11,0.10);
+    color-scheme: dark;
+    --plane: #0a0a0c;
+    --surface: #141419;
+    --surface-2: #1c1c23;
+    --ink: #f4f4f6;
+    --ink-2: #b6b6c2;
+    --muted: #7d7d8c;
+    --grid: #26262f;
+    --bordo: rgba(255,255,255,0.08);
+    --bordo-forte: rgba(255,255,255,0.15);
     --facile: #1baf7a;
     --media: #fab219;
+    --difficile: #e0524f;
+    --accento: #818cf8;
+    --accento-solido: #6366f1;
+    --accento-tenue: rgba(129,140,248,0.15);
+    --glow: 0 0 0 1px rgba(129,140,248,0.28), 0 10px 34px rgba(99,102,241,0.20);
+    --ombra: 0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 32px rgba(0,0,0,0.45);
+    --raggio: 14px;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --plane: #f4f4f2;
+    --surface: #ffffff;
+    --surface-2: #fbfbfa;
+    --ink: #14141a;
+    --ink-2: #4c4c58;
+    --muted: #8a8a96;
+    --grid: #e6e6e0;
+    --bordo: rgba(20,20,26,0.10);
+    --bordo-forte: rgba(20,20,26,0.18);
     --difficile: #d03b3b;
-    --accento: #2a78d6;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) {
-      color-scheme: dark;
-      --plane: #0d0d0d;
-      --surface: #1a1a19;
-      --ink: #ffffff;
-      --ink-2: #c3c2b7;
-      --muted: #898781;
-      --grid: #2c2c2a;
-      --bordo: rgba(255,255,255,0.10);
-      --accento: #3987e5;
-    }
-  }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --plane: #0d0d0d;
-    --surface: #1a1a19;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --bordo: rgba(255,255,255,0.10);
-    --accento: #3987e5;
+    --accento: #4f46e5;
+    --accento-solido: #4f46e5;
+    --accento-tenue: rgba(79,70,229,0.10);
+    --glow: 0 0 0 1px rgba(79,70,229,0.20), 0 10px 26px rgba(79,70,229,0.12);
+    --ombra: 0 1px 2px rgba(20,20,26,0.05), 0 10px 26px rgba(20,20,26,0.07);
   }
 
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 24px 20px 64px;
-    background: var(--plane); color: var(--ink);
+    margin: 0; padding: 30px 20px 76px;
+    /* Due bagliori tenui -- indaco e teal -- danno profondita' allo sfondo scuro
+       e sono cio' su cui le card "vetro" sembrano galleggiare. Fissi allo scroll. */
+    background:
+      radial-gradient(1100px 560px at 12% -14%, rgba(99,102,241,0.13), transparent 58%),
+      radial-gradient(920px 500px at 108% -6%, rgba(27,175,122,0.07), transparent 55%),
+      var(--plane);
+    background-attachment: fixed;
+    color: var(--ink);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   }
   .wrap { max-width: 1180px; margin: 0 auto; }
-  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-  .sub { color: var(--ink-2); margin: 0 0 24px; }
-  .sub code { color: var(--ink); }
+
+  .testata { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  h1 { font-size: 28px; font-weight: 760; margin: 0 0 4px; letter-spacing: -0.03em; line-height: 1.08; }
+  h1 .tenue { color: var(--muted); font-weight: 600; letter-spacing: -0.02em; }
+  h2 { font-size: 15px; margin: 0 0 14px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); margin: 4px 0 26px; max-width: 780px; }
+  .sub code, .sub strong { color: var(--ink); }
+  .sub strong { font-weight: 650; }
+  .r { color: var(--ink-2); }
+
+  .tema {
+    flex: none; cursor: pointer; width: 40px; height: 40px; border-radius: 11px;
+    display: grid; place-items: center; font-size: 18px; line-height: 1;
+    background: var(--surface); border: 1px solid var(--bordo); color: var(--ink);
+    box-shadow: var(--ombra); transition: border-color .1s, transform .1s;
+  }
+  .tema:hover { border-color: var(--accento); transform: translateY(-1px); }
 
   .pannello {
-    background: var(--surface); border: 1px solid var(--bordo);
-    border-radius: 10px; padding: 18px; margin-bottom: 20px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, transparent), var(--surface));
+    border: 1px solid var(--bordo);
+    border-radius: var(--raggio); padding: 20px; margin-bottom: 20px;
+    box-shadow: var(--ombra); backdrop-filter: blur(10px);
   }
 
   .controlli { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-end; }
-  .campo { display: flex; flex-direction: column; gap: 6px; }
-  .campo > label { font-size: 12px; color: var(--ink-2); font-weight: 600; }
-  .campo output { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
-  input[type=range] { width: 190px; accent-color: var(--accento); }
+  .campo { display: flex; flex-direction: column; gap: 7px; }
+  .campo > label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 650; }
+  .campo output { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 650; }
+  input[type=range] { width: 190px; accent-color: var(--accento-solido); height: 5px; }
   select, button {
-    font: inherit; color: var(--ink); background: var(--surface);
-    border: 1px solid var(--bordo); border-radius: 7px; padding: 6px 10px;
+    font: inherit; color: var(--ink); background: var(--surface-2);
+    border: 1px solid var(--bordo); border-radius: 9px; padding: 7px 11px;
+    transition: border-color .1s;
   }
-  button { cursor: pointer; }
-  button.attivo { background: var(--accento); border-color: var(--accento); color: #fff; }
+  select:hover, button:hover { border-color: var(--bordo-forte); }
+  button { cursor: pointer; font-weight: 550; }
+  button.attivo {
+    background: var(--accento-solido); border-color: var(--accento-solido); color: #fff;
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accento-solido) 45%, transparent);
+  }
   :where(button, select, input, tbody tr):focus-visible {
     outline: 2px solid var(--accento); outline-offset: 2px;
   }
@@ -313,13 +346,13 @@ _PAGINA = r"""<!doctype html>
   }
   .gruppo { display: flex; gap: 0; }
   .gruppo button { border-radius: 0; }
-  .gruppo button:first-child { border-radius: 7px 0 0 7px; }
-  .gruppo button:last-child { border-radius: 0 7px 7px 0; margin-left: -1px; }
+  .gruppo button:first-child { border-radius: 9px 0 0 9px; }
+  .gruppo button:last-child { border-radius: 0 9px 9px 0; margin-left: -1px; }
 
-  .legenda { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 14px;
-             padding-top: 14px; border-top: 1px solid var(--grid); font-size: 12px; color: var(--ink-2); }
+  .legenda { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 16px;
+             padding-top: 16px; border-top: 1px solid var(--grid); font-size: 12px; color: var(--ink-2); }
   .voce { display: inline-flex; align-items: center; gap: 6px; }
-  .chip { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--bordo); }
+  .chip { width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--bordo); }
   .chip.facile { background: var(--facile); }
   .chip.media { background: var(--media); }
   .chip.difficile { background: var(--difficile); }
@@ -327,59 +360,78 @@ _PAGINA = r"""<!doctype html>
   .chip.giallo { background: var(--media); }
   .chip.rosso { background: var(--difficile); }
 
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
-  .tile { background: var(--surface); border: 1px solid var(--bordo); border-radius: 10px; padding: 14px 16px; }
-  .tile .etichetta { font-size: 12px; color: var(--ink-2); }
-  .tile .valore { font-size: 25px; font-weight: 650; letter-spacing: -0.02em; margin-top: 2px; }
-  .tile .nota { font-size: 12px; color: var(--muted); }
+  .suggerimento { font-size: 12px; color: var(--ink-2); margin: 16px 0 0; line-height: 1.55; }
+  .suggerimento strong { color: var(--ink); font-weight: 650; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 14px; }
+  .tile {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 86%, transparent), var(--surface));
+    border: 1px solid var(--bordo); border-radius: var(--raggio); padding: 16px 18px;
+    box-shadow: var(--ombra);
+  }
+  /* Il primo tile e' la coppia/terzetto migliore: si accende in indaco per essere
+     la prima cosa che l'occhio prende. */
+  .tile:first-child { border-color: color-mix(in srgb, var(--accento) 45%, var(--bordo)); box-shadow: var(--glow); }
+  .tile:first-child::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accento), transparent 75%);
+  }
+  .tile .etichetta { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 650; }
+  .tile .valore { font-size: 30px; font-weight: 770; letter-spacing: -0.035em; margin-top: 5px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .tile:first-child .valore { color: var(--accento); }
+  .tile .nota { font-size: 12px; color: var(--muted); margin-top: 5px; }
 
   .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 650; }
   td.num, th.num { text-align: right; }
-  tbody tr { cursor: pointer; }
-  tbody tr:hover { background: color-mix(in srgb, var(--accento) 8%, transparent); }
-  tbody tr.sel { background: color-mix(in srgb, var(--accento) 14%, transparent); }
+  tbody tr { cursor: pointer; transition: background .1s; }
+  tbody tr:hover { background: color-mix(in srgb, var(--accento) 10%, transparent); }
+  tbody tr.sel { background: var(--accento-tenue); box-shadow: inset 3px 0 0 var(--accento); }
 
-  .striscia { display: flex; gap: 1px; }
+  .striscia { display: flex; gap: 2px; }
   .cella {
-    width: 9px; height: 20px; border-radius: 2px; flex: none;
+    width: 9px; height: 22px; border-radius: 3px; flex: none;
   }
   .cella.facile { background: var(--facile); }
   .cella.media { background: var(--media); }
   .cella.difficile { background: var(--difficile); }
 
-  .griglia { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
-  .box { border: 1px solid var(--bordo); border-radius: 8px; padding: 8px; background: var(--surface); }
+  .griglia { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 9px; }
+  .box { border: 1px solid var(--bordo); border-radius: 10px; padding: 10px; background: var(--surface-2); }
   .box .g { font-size: 11px; color: var(--muted); }
-  .box .sq { font-weight: 650; margin: 2px 0; }
+  .box .sq { font-weight: 700; margin: 3px 0; }
   .box .avv { font-size: 12px; color: var(--ink-2); }
-  .box .p { font-size: 12px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .box .p { font-size: 12px; font-weight: 650; margin-top: 5px; font-variant-numeric: tabular-nums; }
   .box.facile { border-left: 3px solid var(--facile); }
   .box.media { border-left: 3px solid var(--media); }
   .box.difficile { border-left: 3px solid var(--difficile); }
 
-  .tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--bordo); color: var(--ink-2); }
+  .tag { font-size: 10px; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--bordo); color: var(--ink-2); background: var(--surface-2); }
 
   #tooltip {
     position: fixed; z-index: 50; pointer-events: none; opacity: 0;
     background: var(--surface); color: var(--ink);
-    border: 1px solid var(--bordo); border-radius: 7px; padding: 7px 10px;
-    font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.16); transition: opacity .08s;
-    max-width: 240px;
+    border: 1px solid var(--bordo-forte); border-radius: 9px; padding: 8px 11px;
+    font-size: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); transition: opacity .08s;
+    max-width: 240px; backdrop-filter: blur(10px);
   }
-  #tooltip .t { font-weight: 650; }
+  #tooltip .t { font-weight: 700; }
   #tooltip .r { color: var(--ink-2); }
   .vuoto { color: var(--muted); padding: 20px 0; }
-  .piede { color: var(--muted); font-size: 12px; margin-top: 28px; }
+  .piede { color: var(--muted); font-size: 12px; margin-top: 30px; line-height: 1.6; }
   .piede a { color: var(--accento); }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-<h1><span id="titolo"></span> — Serie A <span id="stagione"></span></h1>
+<div class="testata">
+  <h1><span id="titolo"></span> <span class="tenue">— Serie A <span id="stagione"></span></span></h1>
+  <button class="tema" id="tema" type="button" title="Tema chiaro/scuro" aria-label="Cambia tema chiaro/scuro">◐</button>
+</div>
 <p class="sub">
   <span id="sommario"></span> <span id="meta" class="r"></span>
 </p>
@@ -425,6 +477,9 @@ _PAGINA = r"""<!doctype html>
     <span class="voce"><span class="chip difficile"></span> Difficile</span>
     <span class="r" id="notaEscludi"></span>
   </div>
+  <p class="suggerimento">Il consiglio rende di piu' nelle <strong>finestre corte</strong>: nelle prime giornate il
+    calendario pesa, sull'intera stagione si annulla e resta solo &ldquo;prendi i forti&rdquo;. Sposta
+    <em>Alla giornata</em> su 8-10 e guarda la classifica riordinarsi.</p>
 </div>
 
 <div class="tiles" id="tiles"></div>
@@ -482,6 +537,14 @@ const DATI = __DATI__;
 const $ = (id) => document.getElementById(id);
 const pct = (x) => (x * 100).toFixed(0) + "%";
 const pct1 = (x) => (x * 100).toFixed(1) + "%";
+
+// Tema: il default e' scuro (dashboard premium). Se in una visita precedente hai
+// scelto il chiaro, lo ripristiniamo; altrimenti non tocchiamo niente, cosi' l'host
+// di un Artifact resta libero di stampare da solo il tema del lettore.
+try {
+  const salvato = localStorage.getItem("tema");
+  if (salvato) document.documentElement.setAttribute("data-theme", salvato);
+} catch (e) {}
 
 const stato = {
   // Gli attaccanti si comprano a tre, i portieri a due: e' il default sensato,
@@ -750,9 +813,24 @@ function render() {
   }).join("") : `<p class="vuoto">Seleziona una riga della classifica.</p>`;
 }
 
+// Due squadre vicine in classifica la cui QUALITA' (difesa per i portieri, attacco
+// per gli attaccanti) differisce meno dell'1% sono, per il modello, indistinguibili:
+// Juventus e Inter in porta stanno a 0.4%. Segnalarlo evita di fingere una gerarchia
+// che il modello non ha -- e' lo stesso "pari merito" gia' mostrato giornata per
+// giornata, portato sulla forza di squadra. La tabella e' gia' ordinata per qualita'.
+const TOLLERANZA_PARI = 0.01;
+
 function renderForze() {
-  $("corpoForze").innerHTML = DATI.squadre.map((s, i) => {
+  const sq = DATI.squadre;
+  $("corpoForze").innerHTML = sq.map((s, i) => {
     const note = [];
+    const pari = [];
+    if (i > 0 && Math.abs(s.qualita - sq[i - 1].qualita) / sq[i - 1].qualita < TOLLERANZA_PARI)
+      pari.push(sq[i - 1].nome);
+    if (i < sq.length - 1 && Math.abs(sq[i + 1].qualita - s.qualita) / s.qualita < TOLLERANZA_PARI)
+      pari.push(sq[i + 1].nome);
+    if (pari.length)
+      note.push(`<span class="tag" title="Differenza sotto l'1%: per il modello sono equivalenti, l'ordine e' arbitrario.">≈ pari con ${pari.join(", ")}</span>`);
     if (s.neopromossa && !s.stagioni) note.push(`<span class="tag">neopromossa — nessuno storico</span>`);
     else if (s.neopromossa) note.push(`<span class="tag">neopromossa — ${s.stagioni} stagioni di A, non l'ultima</span>`);
     else if (s.stagioni < 5) note.push(`<span class="tag">solo ${s.stagioni} stagioni di storico</span>`);
@@ -811,6 +889,11 @@ $("budget").oninput = (e) => {
 };
 $("btn2").onclick = () => { stato.dimensione = 2; stato.selezione = null; sincronizza(); render(); };
 $("btn3").onclick = () => { stato.dimensione = 3; stato.selezione = null; sincronizza(); render(); };
+$("tema").onclick = () => {
+  const nuovo = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", nuovo);
+  try { localStorage.setItem("tema", nuovo); } catch (e) {}
+};
 
 // ---- avvio ----
 // Tutte le etichette che dipendono dal ruolo arrivano dal JSON, cosi' portieri e
