@@ -30,12 +30,12 @@ def main() -> None:
     giornate = sorted({p.giornata for p in calendario})
 
     for a, b in COPPIE_PROVA:
-        ma = sum(impegni[a][g].prob_clean_sheet for g in giornate) / len(giornate)
-        mb = sum(impegni[b][g].prob_clean_sheet for g in giornate) / len(giornate)
-        coppia = sum(max(impegni[a][g].prob_clean_sheet, impegni[b][g].prob_clean_sheet) for g in giornate)
+        ma = sum(impegni[a][g].probabilita for g in giornate) / len(giornate)
+        mb = sum(impegni[b][g].probabilita for g in giornate) / len(giornate)
+        coppia = sum(max(impegni[a][g].probabilita, impegni[b][g].probabilita) for g in giornate)
         coppia /= len(giornate)
 
-        volte_b = [g for g in giornate if impegni[b][g].prob_clean_sheet > impegni[a][g].prob_clean_sheet]
+        volte_b = [g for g in giornate if impegni[b][g].probabilita > impegni[a][g].probabilita]
 
         print(f"== {a} + {b} ==")
         print(f"   {a} da solo: {ma:.1%}   {b} da solo: {mb:.1%}   coppia alternando: {coppia:.1%}")
@@ -44,8 +44,8 @@ def main() -> None:
         for g in volte_b[:3]:
             ia, ib = impegni[a][g], impegni[b][g]
             print(
-                f"      g{g:<2}  {a} {'vs' if ia.in_casa else '@'} {ia.avversario} ({ia.prob_clean_sheet:.0%})"
-                f"   <   {b} {'vs' if ib.in_casa else '@'} {ib.avversario} ({ib.prob_clean_sheet:.0%})"
+                f"      g{g:<2}  {a} {'vs' if ia.in_casa else '@'} {ia.avversario} ({ia.probabilita:.0%})"
+                f"   <   {b} {'vs' if ib.in_casa else '@'} {ib.avversario} ({ib.probabilita:.0%})"
             )
         print()
 

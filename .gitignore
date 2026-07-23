@@ -10,9 +10,10 @@ venv/
 Thumbs.db
 desktop.ini
 
-# Derivato da classifica_portieri.html, serve solo alla pubblicazione web.
+# Derivato dalle pagine classifica_*.html, serve solo alla pubblicazione web.
 build/
 
-# NOTA: data/*.csv e classifica_portieri.html sono VERSIONATI di proposito.
-# Sono il risultato dello scraping: averli nel repo significa che su un altro PC
-# apri subito la pagina e lanci `python run.py` senza rete.
+# NOTA: data/*.csv e le pagine classifica_*.html (portieri e attaccanti) sono
+# VERSIONATI di proposito. I CSV sono il risultato dello scraping (data/prezzi.csv
+# invece e' scritto a mano: nessuno scraper lo produce): averli nel repo significa
+# che su un altro PC apri subito le pagine e lanci `python run.py` senza rete.
